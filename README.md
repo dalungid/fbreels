@@ -2,11 +2,10 @@
 
 1. **Instalasi Dependensi**
 ```bash
-# Node.js
 cd node
 npm install
-
-# Python
+```
+```bash
 cd ../python
 pip install -r requirements.txt
 ```
