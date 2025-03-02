@@ -59,17 +59,17 @@ class TikTokAutoUploader:
             if text.startswith('!s'):
                 link = text.split(' ', 1)[1]
                 self.process_single(link)
-                self.reply(msg, '✅ Video berhasil diproses!')
+                self.reply(msg, '[SUCCESS] Video processed!')
                 
             elif text.startswith('!l'):
                 links = text.split('\n')[1:]
                 for link in links:
                     self.process_single(link)
                     time.sleep(30)
-                self.reply(msg, f'✅ {len(links)} video selesai diproses!')
+                self.reply(msg, f'[SUCCESS] {len(links)} videos processed!')
                 
         except Exception as e:
-            self.reply(msg, f'❌ Error: {str(e)}')
+            self.reply(msg, f'[ERROR] {str(e)}')
 
     def reply(self, msg, text):
         msg.click()
