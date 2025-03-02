@@ -3,12 +3,12 @@ import os
 import re
 import time
 import requests
-from selenium import webdriver # type: ignore
-from selenium.webdriver.common.by import By # type: ignore
-from selenium.webdriver.support.ui import WebDriverWait # type: ignore
-from selenium.webdriver.support import expected_conditions as EC # type: ignore
-from selenium.webdriver.chrome.options import Options # type: ignore
-from ffmpeg import FFmpeg # type: ignore
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
+from ffmpeg import FFmpeg
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -50,26 +50,33 @@ class TikTokAutoUploader:
             if not msg.get_attribute('data-id'):
                 continue
 
-            text = msg.find_element(By.CLASS_NAME, '_21Ahp').text
+            text_element = msg.find_element(By.CLASS_NAME, '_21Ahp')
+            text = text_element.text
+            
             if text.startswith(('!s', '!l')):
                 self.handle_command(msg, text)
 
     def handle_command(self, msg, text):
         try:
             if text.startswith('!s'):
-                link = text.split(' ', 1)[1]
+                parts = text.split(' ', 1)
+                if len(parts) < 2:
+                    raise ValueError("Format command salah")
+                link = parts[1]
                 self.process_single(link)
-                self.reply(msg, '[SUCCESS] Video processed!')
+                self.reply(msg, '[SUKSES] Video berhasil diproses!')
                 
             elif text.startswith('!l'):
-                links = text.split('\n')[1:]
+                links = [ln for ln in text.split('\n')[1:] if ln.strip()]
                 for link in links:
                     self.process_single(link)
                     time.sleep(30)
-                self.reply(msg, f'[SUCCESS] {len(links)} videos processed!')
+                reply_text = '[SUKSES] {} video selesai diproses!'.format(len(links))
+                self.reply(msg, reply_text)
                 
         except Exception as e:
-            self.reply(msg, f'[ERROR] {str(e)}')
+            error_msg = '[ERROR] {}'.format(str(e))
+            self.reply(msg, error_msg)
 
     def reply(self, msg, text):
         msg.click()
@@ -92,7 +99,7 @@ class TikTokAutoUploader:
         }
 
     def edit_metadata(self, input_path, metadata):
-        output_path = f'./output/{int(time.time())}.mp4'
+        output_path = './output/{}.mp4'.format(int(time.time()))
         
         ffmpeg = FFmpeg().option('y').input(
             input_path,
@@ -100,13 +107,13 @@ class TikTokAutoUploader:
         ).output(
             output_path,
             **{
-                'metadata': f'title="{metadata["description"]}"',
+                'metadata': 'title="{}"'.format(metadata['description']),
                 'metadata:s:v': 'title="TikTok Video"',
                 'metadata:s:a': 'title="TikTok Audio"',
                 'metadata:g': [
-                    f'software=Wondershare Filmora',
-                    f'date={time.strftime("%Y-%m-%d")}',
-                    f'copyright=Original by {metadata["author"]}'
+                    'software=Wondershare Filmora',
+                    'date={}'.format(time.strftime("%Y-%m-%d")),
+                    'copyright=Original by {}'.format(metadata['author'])
                 ],
                 'c': 'copy'
             }
@@ -115,11 +122,14 @@ class TikTokAutoUploader:
         return output_path
 
     def upload_to_facebook(self, video_path, metadata):
-        caption = f"{metadata['description']}\n\nCredit: @{metadata['author']} #TikTok #Viral"
+        caption = "{}\n\nCredit: @{} #TikTok #Viral".format(
+            metadata['description'],
+            metadata['author']
+        )
         
         with open(video_path, 'rb') as f:
             response = requests.post(
-                f'https://graph.facebook.com/{self.fb_page_id}/video_reels',
+                'https://graph.facebook.com/{}/video_reels'.format(self.fb_page_id),
                 files={'video_file': f},
                 data={
                     'access_token': self.fb_token,
@@ -134,7 +144,7 @@ class TikTokAutoUploader:
         data = self.download_tiktok(url)
         
         # Simpan video sementara
-        temp_path = f'./temp_{int(time.time())}.mp4'
+        temp_path = './temp_{}.mp4'.format(int(time.time()))
         with open(temp_path, 'wb') as f:
             f.write(requests.get(data['video_url']).content)
         
