@@ -21,7 +21,7 @@ class TikTokAutoUploader:
         self.wait = WebDriverWait(self.driver, 30)
 
     def init_whatsapp(self):
-        chrome_options = Options('--headless')
+        chrome_options = Options()
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
         chrome_options.add_argument('user-data-dir=./sessions')
