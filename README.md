@@ -8,6 +8,7 @@ npm install
 ```bash
 cd ../python
 pip install -r requirements.txt
+pip install selenium requests python-dotenv ffmpeg-python python-dateutil webdriver-manager
 ```
 
 2. **FFmpeg**
@@ -15,7 +16,7 @@ pip install -r requirements.txt
 - Untuk Windows: https://ffmpeg.org/download.html
 - Untuk Linux: `sudo apt install ffmpeg`
 
-3. **Cara Menjalankan**
+3. **Cara Menjalankan Versi NodeJS**
 ```bash
 cd node
 node whatsapp-bot.js
