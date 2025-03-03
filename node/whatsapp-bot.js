@@ -1,5 +1,5 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@adiwajshing/baileys');
-const qrcode = require('qrcode-terminal');
+const qrcode = require('qrcode');
 const { processSingle, processBatch } = require('./tiktok-downloader');
 const path = require('path');
 const fs = require('fs');
@@ -11,7 +11,6 @@ const authPath = path.join(__dirname, 'sessions');
 const { state, saveCreds } = useMultiFileAuthState(authPath);
 
 async function startBot() {
-    // Check if credentials are available
     if (!state || !state.creds) {
         console.error('No credentials found, please authenticate the bot first.');
         return;
@@ -19,12 +18,19 @@ async function startBot() {
 
     const sock = makeWASocket({
         auth: state,
-        printQRInTerminal: true // This will print the QR code in the terminal
+        printQRInTerminal: false // Disable terminal QR printing
     });
 
-    // Handle QR code for authentication
+    // Handle QR code generation for authentication
     sock.ev.on('qr', (qr) => {
-        qrcode.generate(qr, { small: true });
+        // Save QR code as an image
+        qrcode.toFile('whatsapp-qr.png', qr, function (err) {
+            if (err) {
+                console.error('Error saving QR code:', err);
+            } else {
+                console.log('QR code saved as whatsapp-qr.png. Please scan it with WhatsApp.');
+            }
+        });
     });
 
     // Handle connection updates (opening, closing, etc.)
@@ -50,7 +56,6 @@ async function startBot() {
 
         if (text) {
             if (text.startsWith('!s')) {
-                // Process single video
                 const link = text.split(' ')[1];
                 try {
                     await processSingle(link);
@@ -61,7 +66,6 @@ async function startBot() {
             }
 
             if (text.startsWith('!l')) {
-                // Process batch of links
                 const links = text.split('\n').slice(1);
                 try {
                     await processBatch(links);
