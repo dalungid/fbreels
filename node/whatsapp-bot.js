@@ -11,18 +11,25 @@ const authPath = path.join(__dirname, '../sessions');
 const { state, saveCreds } = useMultiFileAuthState(authPath);
 
 async function startBot() {
+    if (!state || !state.creds) {
+        console.error('No credentials found, please authenticate the bot first.');
+        return;
+    }
+
     const sock = makeWASocket({
         auth: state,
         printQRInTerminal: true
     });
 
+    // Handle QR code generation for authentication
     sock.ev.on('qr', (qr) => {
         qrcode.generate(qr, { small: true });
     });
 
+    // Handle connection updates
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect } = update;
-        
+
         if (connection === 'close') {
             const shouldReconnect = lastDisconnect.error.output?.statusCode !== DisconnectReason.loggedOut;
             console.log('Connection closed, reconnecting...', shouldReconnect);
@@ -35,6 +42,7 @@ async function startBot() {
         }
     });
 
+    // Handle incoming messages
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
         const text = msg?.message?.conversation;
