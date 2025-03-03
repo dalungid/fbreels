@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@baileys/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@adiwajshing/baileys');
 const qrcode = require('qrcode-terminal');
 const { processSingle, processBatch } = require('./tiktok-downloader');
 const path = require('path');
