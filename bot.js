@@ -15,10 +15,13 @@ const { downloadYouTube } = require('./lib/youtube-downloader');
 const { processVideo } = require('./lib/video-processor');
 
 const client = new Client({
-  authStrategy: new LocalAuth(),
-  puppeteer: { headless: true }
-});
-
+    authStrategy: new LocalAuth(),
+    puppeteer: { 
+      headless: true,
+      executablePath: '/usr/bin/chromium-browser',
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    }
+  });
 // Helper functions
 function sanitizeDescription(desc) {
   return desc.replace(/@\S+/g, '').trim().replace(/\s+/g, ' ');
