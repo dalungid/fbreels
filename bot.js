@@ -44,6 +44,11 @@ async function handleUpload(msg, type, url) {
   let tempPath, processedPath;
   
   try {
+    const config = getConfig();
+    if (!config.access_token || !config.page_id) {
+      throw new Error('Token atau Page ID belum diatur!');
+    }
+
     await msg.reply('⏳ Memproses...');
     
     // Download video
@@ -68,7 +73,7 @@ async function handleUpload(msg, type, url) {
 
   } catch (e) {
     await msg.reply(`❌ Gagal: ${e.message}`);
-    console.error(e.stack);
+    console.error('Error Detail:', e.stack);
   } finally {
     // Cleanup
     if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
