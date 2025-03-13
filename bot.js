@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
 const stream = require('stream');
+const axios = require('axios');
 
 const { getConfig, updateConfig } = require('./lib/config');
 const { uploadVideo } = require('./lib/facebook');
@@ -59,7 +60,7 @@ async function handleUpload(msg, type, url) {
     const tempPath = await downloadFile(videoUrl);
     
     // Process video
-    const processedPath = processVideo(tempPath);
+    const processedPath = await processVideo(tempPath);
     
     // Upload
     await uploadVideo(
@@ -102,8 +103,16 @@ client.on('message', async msg => {
       await msg.reply('✅ Watermark diperbarui!');
     }
   } catch (e) {
+    console.error('❌ Error:', e);
     await msg.reply(`❌ Error: ${e.message}`);
   }
 });
 
-client.initialize();
+(async () => {
+  try {
+    await client.initialize();
+    console.log('🔧 WhatsApp Web Client initialized successfully!');
+  } catch (error) {
+    console.error('❌ Failed to initialize WhatsApp Web Client:', error);
+  }
+})();
