@@ -4,7 +4,6 @@ const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
 const stream = require('stream');
-const axios = require('axios');
 
 const { getConfig, updateConfig } = require('./lib/config');
 const { uploadVideo } = require('./lib/facebook');
@@ -14,19 +13,12 @@ const { processVideo } = require('./lib/video');
 
 const pipeline = promisify(stream.pipeline);
 const client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: {
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--single-process',
-        '--no-zygote'
-      ],
-      executablePath: '/usr/bin/chromium-browser'
-    }
-  });
+  authStrategy: new LocalAuth(),
+  puppeteer: {
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  }
+});
 
 // Helper functions
 async function downloadFile(url) {
@@ -60,7 +52,7 @@ async function handleUpload(msg, type, url) {
     const tempPath = await downloadFile(videoUrl);
     
     // Process video
-    const processedPath = await processVideo(tempPath);
+    const processedPath = processVideo(tempPath);
     
     // Upload
     await uploadVideo(
@@ -103,16 +95,8 @@ client.on('message', async msg => {
       await msg.reply('✅ Watermark diperbarui!');
     }
   } catch (e) {
-    console.error('❌ Error:', e);
     await msg.reply(`❌ Error: ${e.message}`);
   }
 });
 
-(async () => {
-  try {
-    await client.initialize();
-    console.log('🔧 WhatsApp Web Client initialized successfully!');
-  } catch (error) {
-    console.error('❌ Failed to initialize WhatsApp Web Client:', error);
-  }
-})();
+client.initialize();
