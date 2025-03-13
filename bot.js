@@ -13,12 +13,19 @@ const { processVideo } = require('./lib/video');
 
 const pipeline = promisify(stream.pipeline);
 const client = new Client({
-  authStrategy: new LocalAuth(),
-  puppeteer: {
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  }
-});
+    authStrategy: new LocalAuth(),
+    puppeteer: {
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--single-process',
+        '--no-zygote'
+      ],
+      executablePath: '/usr/bin/chromium-browser'
+    }
+  });
 
 // Helper functions
 async function downloadFile(url) {
