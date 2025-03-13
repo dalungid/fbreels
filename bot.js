@@ -4,18 +4,12 @@ const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
 const stream = require('stream');
-const axios = require('axios');
 
-const { getConfig, updateConfig } = require('./lib/config-manager');
-const { 
-  initializeUploader, 
-  uploadVideo, 
-  debugToken, 
-  refreshToken 
-} = require('./lib/facebook-uploader');
-const { downloadTikTok } = require('./lib/tiktok-downloader');
-const { downloadYouTube } = require('./lib/youtube-downloader');
-const { processVideo } = require('./lib/video-processor');
+const { getConfig, updateConfig } = require('./lib/config');
+const { uploadVideo } = require('./lib/facebook');
+const { downloadTikTok } = require('./lib/tiktok');
+const { downloadYouTube } = require('./lib/youtube');
+const { processVideo } = require('./lib/video');
 
 const pipeline = promisify(stream.pipeline);
 const client = new Client({
@@ -38,65 +32,51 @@ async function downloadFile(url) {
   return tempPath;
 }
 
-function sanitizeDescription(text) {
+function cleanDescription(text) {
   return text
-    .replace(/@\w+/g, '') // Hapus mention
+    .replace(/@\S+/g, '') // Remove mentions
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-// Command handlers
-async function handleUpload(msg, videoPath, description) {
+async function handleUpload(msg, type, url) {
   try {
-    await msg.reply('⏳ Memulai upload ke Facebook...');
-    await uploadVideo(videoPath, description);
+    await msg.reply('⏳ Memproses...');
+    
+    // Download video
+    const { url: videoUrl, title } = type === 'tiktok' 
+      ? await downloadTikTok(url)
+      : await downloadYouTube(url);
+
+    // Download file
+    const tempPath = await downloadFile(videoUrl);
+    
+    // Process video
+    const processedPath = processVideo(tempPath);
+    
+    // Upload
+    await uploadVideo(
+      processedPath,
+      getConfig().text,
+      cleanDescription(title)
+    );
+    
+    // Cleanup
+    [tempPath, processedPath].forEach(p => {
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    });
+
     await msg.reply('✅ Upload berhasil!');
+
   } catch (e) {
-    await msg.reply(`❌ Gagal upload: ${e.message}`);
-    throw e;
-  } finally {
-    if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
+    await msg.reply(`❌ Gagal: ${e.message}`);
+    console.error(e);
   }
 }
 
-async function handleTikTok(msg, url) {
-  try {
-    const { url: videoUrl, title } = await downloadTikTok(url);
-    const tempPath = await downloadFile(videoUrl);
-    const processedPath = processVideo(tempPath);
-    
-    await handleUpload(msg, processedPath, sanitizeDescription(title));
-    fs.unlinkSync(tempPath);
-  } catch (e) {
-    await msg.reply(`❌ Gagal proses TikTok: ${e.message}`);
-  }
-}
-
-async function handleYouTube(msg, url) {
-  try {
-    const { url: videoUrl, title } = await downloadYouTube(url);
-    const tempPath = await downloadFile(videoUrl);
-    const processedPath = processVideo(tempPath);
-    
-    await handleUpload(msg, processedPath, sanitizeDescription(title));
-    fs.unlinkSync(tempPath);
-  } catch (e) {
-    await msg.reply(`❌ Gagal proses YouTube: ${e.message}`);
-  }
-}
-
-// Bot setup
 client.on('qr', qr => qrcode.generate(qr, { small: true }));
-client.on('authenticated', () => console.log('✅ Authenticated!'));
-client.on('ready', async () => {
-  console.log('🚀 Client ready!');
-  try {
-    await initializeUploader();
-  } catch (e) {
-    console.error('❌ Gagal inisialisasi:', e.message);
-    process.exit(1);
-  }
-});
+client.on('authenticated', () => console.log('✅ Autentikasi berhasil!'));
+client.on('ready', () => console.log('🚀 Bot siap!'));
 
 client.on('message', async msg => {
   const text = msg.body;
@@ -104,20 +84,15 @@ client.on('message', async msg => {
 
   try {
     if (text.startsWith('!t ')) {
-      await handleTikTok(msg, text.split(' ')[1]);
+      await handleUpload(msg, 'tiktok', text.split(' ')[1]);
     } else if (text.startsWith('!y ')) {
-      await handleYouTube(msg, text.split(' ')[1]);
-    } else if (text === '!cektoken') {
-      const tokenInfo = await debugToken();
-      const message = tokenInfo.valid 
-        ? `✅ Token valid hingga: ${tokenInfo.expiresAt.toLocaleString()}`
-        : `❌ Token invalid: ${tokenInfo.error.message}`;
-      await msg.reply(message);
+      await handleUpload(msg, 'youtube', text.split(' ')[1]);
     } else if (text.startsWith('!updatetoken ')) {
-      const newToken = text.split(' ')[1];
-      updateConfig({ access_token: newToken });
-      await initializeUploader();
-      await msg.reply('✅ Token berhasil diperbarui!');
+      updateConfig({ access_token: text.split(' ')[1] });
+      await msg.reply('✅ Token diperbarui!');
+    } else if (text.startsWith('!gantiwm ')) {
+      updateConfig({ text: text.split(' ').slice(1).join(' ') });
+      await msg.reply('✅ Watermark diperbarui!');
     }
   } catch (e) {
     await msg.reply(`❌ Error: ${e.message}`);
