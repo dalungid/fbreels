@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
 const stream = require('stream');
+const axios = require('axios');
 
 const { getConfig, updateConfig } = require('./lib/config');
 const { uploadVideo } = require('./lib/facebook');
@@ -34,12 +35,14 @@ async function downloadFile(url) {
 
 function cleanDescription(text) {
   return text
-    .replace(/@\S+/g, '') // Remove mentions
+    .replace(/@\S+/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 async function handleUpload(msg, type, url) {
+  let tempPath, processedPath;
+  
   try {
     await msg.reply('⏳ Memproses...');
     
@@ -49,10 +52,10 @@ async function handleUpload(msg, type, url) {
       : await downloadYouTube(url);
 
     // Download file
-    const tempPath = await downloadFile(videoUrl);
+    tempPath = await downloadFile(videoUrl);
     
     // Process video
-    const processedPath = processVideo(tempPath);
+    processedPath = processVideo(tempPath);
     
     // Upload
     await uploadVideo(
@@ -61,19 +64,50 @@ async function handleUpload(msg, type, url) {
       cleanDescription(title)
     );
     
-    // Cleanup
-    [tempPath, processedPath].forEach(p => {
-      if (fs.existsSync(p)) fs.unlinkSync(p);
-    });
-
     await msg.reply('✅ Upload berhasil!');
 
   } catch (e) {
     await msg.reply(`❌ Gagal: ${e.message}`);
-    console.error(e);
+    console.error(e.stack);
+  } finally {
+    // Cleanup
+    if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    if (processedPath && fs.existsSync(processedPath)) fs.unlinkSync(processedPath);
   }
 }
 
+async function handleList(msg, type) {
+  const urls = msg.body.split('\n').slice(1);
+  for (const url of urls.filter(u => u.trim())) {
+    try {
+      await handleUpload(msg, type, url.trim());
+    } catch (e) {
+      await msg.reply(`❌ Gagal proses ${url}: ${e.message}`);
+    }
+  }
+}
+
+async function checkToken(msg) {
+  try {
+    const { access_token } = getConfig();
+    const response = await axios.get(
+      `https://graph.facebook.com/v22.0/debug_token?input_token=${access_token}&access_token=${access_token}`
+    );
+    
+    const tokenData = response.data.data;
+    const message = [
+      `✅ Valid: ${tokenData.is_valid}`,
+      `📅 Expires: ${new Date(tokenData.expires_at * 1000).toLocaleString()}`,
+      `🛠 Scopes: ${tokenData.scopes.join(', ')}`
+    ].join('\n');
+    
+    await msg.reply(message);
+  } catch (e) {
+    await msg.reply(`❌ Gagal cek token: ${e.response?.data?.error?.message || e.message}`);
+  }
+}
+
+// Bot setup
 client.on('qr', qr => qrcode.generate(qr, { small: true }));
 client.on('authenticated', () => console.log('✅ Autentikasi berhasil!'));
 client.on('ready', () => console.log('🚀 Bot siap!'));
@@ -85,8 +119,14 @@ client.on('message', async msg => {
   try {
     if (text.startsWith('!t ')) {
       await handleUpload(msg, 'tiktok', text.split(' ')[1]);
+    } else if (text.startsWith('!tl')) {
+      await handleList(msg, 'tiktok');
     } else if (text.startsWith('!y ')) {
       await handleUpload(msg, 'youtube', text.split(' ')[1]);
+    } else if (text.startsWith('!yl')) {
+      await handleList(msg, 'youtube');
+    } else if (text === '!cektoken') {
+      await checkToken(msg);
     } else if (text.startsWith('!updatetoken ')) {
       updateConfig({ access_token: text.split(' ')[1] });
       await msg.reply('✅ Token diperbarui!');
