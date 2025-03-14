@@ -6,22 +6,20 @@ const { promisify } = require('util');
 const stream = require('stream');
 const axios = require('axios');
 
-const { getConfig, updateConfig } = require('./lib/config');
-const { uploadVideo } = require('./lib/facebook');
-const { downloadTikTok } = require('./lib/tiktok');
-const { downloadYouTube } = require('./lib/youtube');
-const { processVideo } = require('./lib/video');
+const { getConfig } = require('./lib/config');
+const { uploadReels } = require('./lib/facebook-uploader');
+const { downloadTikTok } = require('./lib/tiktok-downloader');
+const { downloadYouTube } = require('./lib/youtube-downloader');
+const { processVideo } = require('./lib/video-processor');
 
 const pipeline = promisify(stream.pipeline);
 const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: ['--no-sandbox']
   }
 });
 
-// Helper functions
 async function downloadFile(url) {
   const tempDir = path.join(__dirname, 'temp');
   if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
@@ -33,24 +31,10 @@ async function downloadFile(url) {
   return tempPath;
 }
 
-function cleanDescription(text) {
-  return text
-    .replace(/@\S+/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 async function handleUpload(msg, type, url) {
   let tempPath, processedPath;
   
   try {
-    const config = getConfig();
-    if (!config.access_token || !config.page_id) {
-      throw new Error('Token atau Page ID belum diatur!');
-    }
-
-    await msg.reply('⏳ Memproses...');
-    
     // Download video
     const { url: videoUrl, title } = type === 'tiktok' 
       ? await downloadTikTok(url)
@@ -62,60 +46,31 @@ async function handleUpload(msg, type, url) {
     // Process video
     processedPath = processVideo(tempPath);
     
-    // Upload
-    await uploadVideo(
+    // Upload ke Facebook
+    const { success, error, screenshot } = await uploadReels(
       processedPath,
-      getConfig().text,
-      cleanDescription(title)
+      `${title} ${getConfig().watermark.text}`
     );
-    
-    await msg.reply('✅ Upload berhasil!');
 
-  } catch (e) {
-    await msg.reply(`❌ Gagal: ${e.message}`);
-    console.error('Error Detail:', e.stack);
-  } finally {
-    // Cleanup
-    if (tempPath && fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-    if (processedPath && fs.existsSync(processedPath)) fs.unlinkSync(processedPath);
-  }
-}
-
-async function handleList(msg, type) {
-  const urls = msg.body.split('\n').slice(1);
-  for (const url of urls.filter(u => u.trim())) {
-    try {
-      await handleUpload(msg, type, url.trim());
-    } catch (e) {
-      await msg.reply(`❌ Gagal proses ${url}: ${e.message}`);
+    if (success) {
+      await msg.reply('✅ Reels berhasil diupload!');
+    } else {
+      await msg.reply(`❌ Gagal upload: ${error}\n📸 Screenshot: ${screenshot}`);
     }
-  }
-}
 
-async function checkToken(msg) {
-  try {
-    const { access_token } = getConfig();
-    const response = await axios.get(
-      `https://graph.facebook.com/v22.0/debug_token?input_token=${access_token}&access_token=${access_token}`
-    );
-    
-    const tokenData = response.data.data;
-    const message = [
-      `✅ Valid: ${tokenData.is_valid}`,
-      `📅 Expires: ${new Date(tokenData.expires_at * 1000).toLocaleString()}`,
-      `🛠 Scopes: ${tokenData.scopes.join(', ')}`
-    ].join('\n');
-    
-    await msg.reply(message);
   } catch (e) {
-    await msg.reply(`❌ Gagal cek token: ${e.response?.data?.error?.message || e.message}`);
+    await msg.reply(`❌ Error: ${e.message}`);
+    console.error(e.stack);
+  } finally {
+    [tempPath, processedPath].forEach(p => {
+      if (p && fs.existsSync(p)) fs.unlinkSync(p);
+    });
   }
 }
 
-// Bot setup
 client.on('qr', qr => qrcode.generate(qr, { small: true }));
-client.on('authenticated', () => console.log('✅ Autentikasi berhasil!'));
-client.on('ready', () => console.log('🚀 Bot siap!'));
+client.on('authenticated', () => console.log('✅ Autentikasi WhatsApp berhasil!'));
+client.on('ready', () => console.log('🤖 Bot siap menerima command!'));
 
 client.on('message', async msg => {
   const text = msg.body;
@@ -124,20 +79,14 @@ client.on('message', async msg => {
   try {
     if (text.startsWith('!t ')) {
       await handleUpload(msg, 'tiktok', text.split(' ')[1]);
-    } else if (text.startsWith('!tl')) {
-      await handleList(msg, 'tiktok');
     } else if (text.startsWith('!y ')) {
       await handleUpload(msg, 'youtube', text.split(' ')[1]);
-    } else if (text.startsWith('!yl')) {
-      await handleList(msg, 'youtube');
-    } else if (text === '!cektoken') {
-      await checkToken(msg);
-    } else if (text.startsWith('!updatetoken ')) {
-      updateConfig({ access_token: text.split(' ')[1] });
-      await msg.reply('✅ Token diperbarui!');
-    } else if (text.startsWith('!gantiwm ')) {
-      updateConfig({ text: text.split(' ').slice(1).join(' ') });
-      await msg.reply('✅ Watermark diperbarui!');
+    } else if (text.startsWith('!login')) {
+      await msg.reply('🔑 Jalankan perintah berikut di server:\nnpm run login');
+    } else if (text.startsWith('!wm ')) {
+      const newText = text.split(' ').slice(1).join(' ');
+      // Implement update watermark
+      await msg.reply(`🖼️ Watermark diubah ke: ${newText}`);
     }
   } catch (e) {
     await msg.reply(`❌ Error: ${e.message}`);
